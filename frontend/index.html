@@ -87,6 +87,7 @@
     <a id="download-link" class="download-link hidden" href="#">Tải xuống</a>
   </div>
 
+  <script src="env.js"></script>
   <script>
     const urlInput = document.getElementById('video-url');
     const btn = document.getElementById('download-btn');
@@ -109,7 +110,7 @@
 
     async function fetchVideoInfo(url, sessdata) {
       try {
-        const response = await fetch(`https://bilibili-video-download-production.up.railway.app/api/video?url= ${encodeURIComponent(url)}&sessdata=${encodeURIComponent(sessdata)}`);
+        const response = await fetch(`${BACKEND_URL}/api/video?url=${encodeURIComponent(url)}&sessdata=${encodeURIComponent(sessdata)}`);
         const data = await response.json();
         if (response.status === 403) throw new Error('SESSDATA hết hạn hoặc không hợp lệ');
         if (data.error) throw new Error(data.error);
