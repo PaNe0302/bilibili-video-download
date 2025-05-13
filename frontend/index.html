@@ -113,16 +113,6 @@
     <p id="video-title" style="margin-top: 10px; font-size: 1.2em; font-weight: bold;"></p>
     
     <!-- Container cho Video Player (Tùy chọn) -->
-     <div id="video-player-container" style="margin-top: 10px;">
-        <!-- Video player sẽ được thêm vào đây bằng JS -->
-     </div>
-
-    <p style="margin-top: 15px; font-weight: bold;">Chọn chất lượng để tải xuống và ghép:</p>
-    <!-- Container cho các tùy chọn tải xuống -->
-    <div id="download-options">
-        <!-- Các nút tải xuống sẽ được thêm vào đây bằng JS -->
-    </div>
-
      <!-- Thanh tiến trình và trạng thái -->
      <div id="progress-container" class="hidden">
          <p id="status-message"></p>
@@ -261,16 +251,6 @@
        // Tùy chọn: Hiển thị video player với chất lượng tốt nhất
        // Tìm chất lượng có qn cao nhất để hiển thị
        const bestQualityForPlayback = data.availableQualities.reduce((prev, current) => (prev.qn > current.qn) ? prev : current);
-       if (bestQualityForPlayback && bestQualityForPlayback.videoUrl) {
-           const videoPlayer = document.createElement('video');
-           videoPlayer.controls = true;
-           videoPlayer.style.width = '100%';
-           videoPlayer.src = bestQualityForPlayback.videoUrl; // Chỉ dùng video URL để phát
-           // Lưu ý: Phát video DASH (có URL riêng cho video/audio) trực tiếp trong thẻ <video> có thể không hỗ trợ âm thanh. 
-           // Cần HLS/DASH player (như hls.js hoặc dash.js) để phát kèm âm thanh.
-           // Hiện tại chỉ hiển thị luồng video cho preview đơn giản.
-           videoPlayerContainer.appendChild(videoPlayer); // Thêm player
-       }
 
       // Tạo nút tải cho từng chất lượng
       data.availableQualities.forEach(quality => {
@@ -280,6 +260,7 @@
            downloadButton.dataset.videoUrl = quality.videoUrl;
            downloadButton.dataset.audioUrl = quality.audioUrl;
            downloadButton.dataset.title = data.title || data.bvid;
+           downloadButton.dataset.qualityLabel = quality.label;
            downloadButton.classList.add('download-button'); // Thêm class để dễ chọn
 
           downloadButton.onclick = handleDownloadClick;
@@ -289,6 +270,7 @@
       statusMessage.textContent = 'Chọn chất lượng để tải xuống.';
       progressBar.style.width = '0%';
       progressBar.textContent = '0%';
+      progressContainer.classList.add('hidden');
       console.log('Download UI shown.'); // Log 9
     }
 
@@ -378,7 +360,7 @@
                  showError('Không thể tải FFmpeg. Vui lòng thử lại.');
                   // Bật lại các nút nếu load FFmpeg thất bại
                  downloadButtons.forEach(btn => btn.disabled = false);
-                  button.textContent = `Tải xuống và ghép: ${button.textContent.split(':')[1].trim()}`; // Khôi phục text
+                  button.textContent = `Tải xuống và ghép: ${button.dataset.qualityLabel}`; // Khôi phục text
                   progressContainer.classList.add('hidden');
                  return;
              }
