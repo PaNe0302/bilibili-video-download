@@ -159,11 +159,11 @@
     let lastSessdata = localStorage.getItem('bilibili_sessdata') || '';
 
     let ffmpeg = null;
-    const createFFmpeg = FFmpeg.createFFmpeg;
 
     // Hàm tải và khởi tạo FFmpeg
     async function loadFFmpeg() {
       console.log('Attempting to load FFmpeg'); // Log 3
+      const createFFmpeg = FFmpeg.createFFmpeg; // Moved inside function
       if (ffmpeg && ffmpeg.isLoaded()) {
           console.log('FFmpeg already loaded.');
           return;
