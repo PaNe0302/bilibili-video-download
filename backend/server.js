@@ -1,5 +1,6 @@
 const express = require('express');
 const axios = require('axios');
+// Xóa require('child_process') hoặc liên quan đến ffmpeg nếu có
 
 const app = express();
 
@@ -40,6 +41,7 @@ async function callBilibiliAPI(apiUrl, sessdata) {
 }
 
 // API chính để lấy thông tin video và định dạng tải xuống
+// Endpoint này sẽ trả về URL của video và audio riêng biệt cho các chất lượng >= 720p
 app.get('/api/video', async (req, res) => {
   const { url, sessdata } = req.query;
 
@@ -47,10 +49,10 @@ app.get('/api/video', async (req, res) => {
     return res.status(400).json({ error: 'URL không hợp lệ. Phải là video từ bilibili.com' });
   }
 
-  if (!sessdata) {
-    // Frontend sẽ xử lý việc thiếu sessdata, backend không trả lỗi 400 ngay
-    // return res.status(400).json({ error: 'SESSDATA là bắt buộc.' });
-  }
+  // sessdata là tùy chọn ở đây, nhưng cần cho video giới hạn hoặc chất lượng cao
+  // if (!sessdata) {
+  //   return res.status(400).json({ error: 'SESSDATA là bắt buộc.' });
+  // }
 
   try {
     // Trích xuất bvid từ URL
@@ -60,26 +62,24 @@ app.get('/api/video', async (req, res) => {
     }
     const bvid = bvidMatch[0];
 
-    // Gọi API Bilibili để lấy cid
+    // Gọi API Bilibili để lấy cid và thông tin chung
     const viewApiUrl = `https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`;
-    // Cần SESSDATA để gọi API view trong nhiều trường hợp, nhưng thử gọi trước xem có cần không
-    let infoData;
+     let infoData;
     try {
         infoData = await callBilibiliAPI(viewApiUrl, sessdata || ''); // Thử gọi với sessdata hoặc chuỗi rỗng
     } catch (viewErr) {
-         // Nếu lỗi khi gọi API view, kiểm tra nếu do thiếu SESSDATA (403) hoặc các lỗi Bilibili khác
-        if (viewErr.status === 403) {
+         if (viewErr.status === 403) {
              return res.status(403).json({ error: 'Không thể lấy thông tin video. Có thể SESSDATA hết hạn, không hợp lệ hoặc video bị giới hạn quyền truy cập.'});
-        } else if (viewErr.status === 400 && viewErr.data?.code === -400) { // Lỗi từ Bilibili do request sai
+        } else if (viewErr.status === 400 && viewErr.data?.code === -400) {
             return res.status(400).json({error: `Lỗi từ Bilibili khi lấy thông tin video: ${viewErr.data.message || viewErr.message}`});
         } else {
-             throw viewErr; // Ném lỗi khác
+             throw viewErr;
         }
     }
 
+
     if (infoData.code !== 0 || !infoData.data || !infoData.data.cid) {
       console.error('Lỗi lấy cid từ Bilibili API:', infoData);
-      // Lỗi từ API Bilibili không phải 403 nhưng không lấy được data/cid
       return res.status(infoData.code === -400 ? 400 : 500).json({
           error: `Không thể lấy thông tin video (cid). Mã lỗi Bilibili: ${infoData.code}. Message: ${infoData.message || 'Không có message'}`
       });
@@ -89,73 +89,63 @@ app.get('/api/video', async (req, res) => {
     const videoThumbnail = infoData.data.pic;
 
     // Các độ phân giải ưu tiên (chỉ dùng để tìm qn và label)
+    // Chỉ lấy các chất lượng từ 720p trở lên theo yêu cầu
     const QUALITIES = [
       { qn: 120, label: '4K HDR' },
       { qn: 116, label: '1080P 60fps (HEVC)'},
       { qn: 112, label: '1080P+ (HDR)' },
       { qn: 80, label: '1080P' },
       { qn: 74, label: '720P 60fps (HEVC)'},
-      { qn: 64, label: '720P' },
-      { qn: 32, label: '480P' },
-      { qn: 16, label: '360P' }
+      { qn: 64, label: '720P' }
+      // Các chất lượng thấp hơn sẽ không được cung cấp URL riêng
     ];
 
-    let selectedFormat = null; // Lưu thông tin định dạng tốt nhất tìm được
+    const availableQualities = [];
 
-    // Tìm chất lượng tốt nhất có thể tải
+    // Tìm các chất lượng có sẵn luồng video và audio
     for (const quality of QUALITIES) {
-      const playUrlApi = `https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=${quality.qn}&fnval=16`; // fnval=16 cho DASH
+      // fnval=16 yêu cầu định dạng DASH
+      const playUrlApi = `https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=${quality.qn}&fnval=16`;
       try {
-        // Gọi API playurl với sessdata (nếu có) hoặc rỗng. 
-        // Hàm callBilibiliAPI đã có Referer và User-Agent.
         const playData = await callBilibiliAPI(playUrlApi, sessdata || '');
 
-        if (playData.code === 0 && playData.data?.dash?.video?.length > 0) {
-           // Nếu thành công, lưu lại thông tin chất lượng này và dừng tìm kiếm
-           const videoStream = playData.data.dash.video[0];
-           const downloadLink = videoStream.baseUrl || (videoStream.backupUrl && videoStream.backupUrl[0]); 
-           
-           if(downloadLink){
-               selectedFormat = { ...quality, // Lưu qn và label
-                                  // Thêm thông tin ước tính size (chỉ mang tính tham khảo)
-                                  size: videoStream.bandwidth ? (videoStream.bandwidth * (infoData.data.duration || 300) / 8 / 1024 / 1024).toFixed(2) + ' MB (ước tính)' : 'Không rõ',
-                                  // Link này sẽ KHÔNG được dùng trực tiếp bởi frontend để tải
-                                  link: downloadLink
-                                };
-                console.log(`Tìm thấy chất lượng ${quality.label} (qn: ${quality.qn}) cho bvid ${bvid}`);
-                break; // Tìm thấy chất lượng tốt nhất, thoát vòng lặp
+        // Kiểm tra nếu có cả luồng video và audio trong định dạng DASH
+        if (playData.code === 0 && playData.data?.dash?.video?.length > 0 && playData.data?.dash?.audio?.length > 0) {
+           const videoStreamUrl = playData.data.dash.video[0].baseUrl || (playData.data.dash.video[0].backupUrl && playData.data.dash.video[0].backupUrl[0]);
+           const audioStreamUrl = playData.data.dash.audio[0].baseUrl || (playData.data.dash.audio[0].backupUrl && playData.data.dash.audio[0].backupUrl[0]);
+
+           if(videoStreamUrl && audioStreamUrl){
+               availableQualities.push({
+                   qn: quality.qn,
+                   label: quality.label,
+                   videoUrl: videoStreamUrl,
+                   audioUrl: audioStreamUrl
+               });
+               console.log(`Tìm thấy chất lượng ${quality.label} (qn: ${quality.qn}) với URL video và audio cho bvid ${bvid}`);
            } else {
-              console.warn(`Không có baseUrl hoặc backupUrl cho luồng video DASH cho chất lượng ${quality.label} (qn: ${quality.qn}) cho bvid ${bvid}.`);
+              console.warn(`Không có baseUrl hoặc backupUrl cho cả luồng video/audio DASH cho chất lượng ${quality.label} (qn: ${quality.qn}) cho bvid ${bvid}.`);
            }
         } else {
-           console.warn(`Không có luồng video DASH cho chất lượng ${quality.label} (qn: ${quality.qn}) cho bvid ${bvid}. Code: ${playData.code}, Message: ${playData.message}`);
+           console.warn(`Không có luồng video/audio DASH cho chất lượng ${quality.label} (qn: ${quality.qn}) cho bvid ${bvid}. Code: ${playData.code}, Message: ${playData.message}`);
         }
       } catch (e) {
-        // Log lỗi chi tiết khi gọi API cho một chất lượng cụ thể
         console.error(`Lỗi khi lấy playurl cho chất lượng ${quality.label} (qn: ${quality.qn}) cho bvid ${bvid}:`, e.message, e.status ? `Status: ${e.status}` : '');
-        if (e.status === 403) {
-          // Nếu lỗi 403 cụ thể ở đây, có thể SESSDATA không đủ quyền cho chất lượng này
-          console.warn(`SESSDATA có thể không đủ quyền cho chất lượng ${quality.label} (qn: ${quality.qn})`);
-        } else if (e.status === 412) {
-             // Log lỗi 412 (Precondition Failed) - có thể do Referer hoặc các header khác
-             console.error(`Lỗi 412 (Precondition Failed) khi gọi playurl cho chất lượng ${quality.label}. Referer hoặc header khác có thể sai.`);
-        }
-        // Tiếp tục thử chất lượng tiếp theo
+        // Tiếp tục thử chất lượng tiếp theo nếu có lỗi
       }
     }
 
-    if (!selectedFormat) {
-      // Nếu không tìm thấy định dạng nào tải được
-      return res.status(404).json({ error: 'Không tìm thấy định dạng video phù hợp. SESSDATA có thể không hợp lệ, hết hạn, hoặc video yêu cầu quyền truy cập cao hơn cho các định dạng có sẵn.' });
+    if (availableQualities.length === 0) {
+      // Nếu không tìm thấy định dạng nào có cả video và audio >= 720p
+      return res.status(404).json({ error: 'Không tìm thấy định dạng video/audio phù hợp (>= 720p). Có thể SESSDATA không hợp lệ, hết hạn, hoặc video chỉ có các định dạng cũ/thấp hơn.' });
     }
 
-    // Trả về thông tin video và định dạng tốt nhất đã tìm được
+    // Trả về thông tin video và danh sách các chất lượng có URL video+audio
     res.json({
       title: videoTitle,
       thumbnail: videoThumbnail,
       bvid: bvid,
       cid: cid,
-      format: selectedFormat // Bao gồm qn, label, size, link (link này chỉ mang tính tham khảo, frontend dùng bvid, cid, qn để gọi /api/download)
+      availableQualities: availableQualities
     });
 
   } catch (err) {
@@ -173,122 +163,18 @@ app.get('/api/video', async (req, res) => {
      }
     // Lỗi từ Bilibili API (có status khác 403, 400)
     if (err.message && err.message.includes('API Bilibili')) {
-        // Trả về status gốc từ Bilibili nếu có, mặc định là 502 (Bad Gateway)
         return res.status(err.status || 502).json({error: `Lỗi từ Bilibili: ${err.message}`});
     }
     // Lỗi nội bộ khác
     return res.status(500).json({
       error: 'Lỗi máy chủ nội bộ',
       detail: err.message
-      // Không nên gửi stack trace ra client trong production
     });
   }
 });
 
-// API để tải video (backend proxy)
-app.get('/api/download', async (req, res) => {
-    const { bvid, cid, qn, sessdata, title } = req.query;
-
-    if (!bvid || !cid || !qn) {
-        return res.status(400).json({ error: 'Thiếu thông tin video (bvid, cid, qn) để tải xuống.' });
-    }
-
-    if (!sessdata) {
-         // Endpoint download KHÔNG TỰ YÊU CẦU sessdata. Frontend đảm bảo gửi sessdata lên.
-         return res.status(400).json({ error: 'SESSDATA là bắt buộc để tải xuống.' });
-    }
-
-    try {
-        // Gọi API playurl của Bilibili để lấy URL stream trực tiếp
-        // Sử dụng hàm helper callBilibiliAPI mới đã có Referer
-        const playUrlApi = `https://api.bilibili.com/x/player/playurl?bvid=${bvid}&cid=${cid}&qn=${qn}&fnval=16`;
-        const playData = await callBilibiliAPI(playUrlApi, sessdata);
-
-        if (playData.code !== 0 || !playData.data?.dash?.video?.length > 0) {
-             console.error('Lỗi lấy stream URL từ Bilibili API:', playData);
-             return res.status(500).json({
-                 error: `Không thể lấy URL stream từ Bilibili. Mã lỗi Bilibili: ${playData.code}. Message: ${playData.message || 'Không có message'}`
-             });
-        }
-
-        const videoStreamUrl = playData.data.dash.video[0].baseUrl || (playData.data.dash.video[0].backupUrl && playData.data.dash.video[0].backupUrl[0]);
-
-        if (!videoStreamUrl) {
-             console.error('Không tìm thấy baseUrl hoặc backupUrl trong phản hồi API playurl', playData);
-             return res.status(500).json({ error: 'Không tìm thấy URL stream video.' });
-        }
-
-        console.log(`Đang tải stream từ: ${videoStreamUrl}`);
-
-        // Thiết lập header cho phản hồi tải xuống
-        res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(title || bvid)}.mp4"`);
-        res.setHeader('Content-Type', 'video/mp4'); // Hoặc loại MIME phù hợp
-        res.setHeader('Transfer-Encoding', 'chunked');
-
-        // Tải stream từ Bilibili và pipe về response
-        // KHÔNG sử dụng callBilibiliAPI ở đây vì ta cần responseType: 'stream'
-        const streamResponse = await axios({
-            method: 'get',
-            url: videoStreamUrl,
-            responseType: 'stream',
-            headers: {
-                 // RẤT QUAN TRỌNG: Gửi SESSDATA (và Referer) khi tải stream trực tiếp
-                 'Cookie': `SESSDATA=${sessdata}`,
-                 'Referer': 'https://www.bilibili.com/', // Thêm Referer
-                 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.93 Safari/537.36'
-            }
-        });
-
-        // Pipe stream từ Bilibili về client
-        streamResponse.data.pipe(res);
-
-        // Xử lý lỗi trong quá trình stream
-        streamResponse.data.on('error', (streamErr) => {
-            console.error('Lỗi khi stream dữ liệu video:', streamErr);
-            // Chỉ gửi lỗi nếu headers chưa được gửi
-            if (!res.headersSent) {
-                res.status(500).json({ error: 'Lỗi khi truyền dữ liệu video.' });
-            } else {
-                // Nếu headers đã gửi, chỉ có thể đóng kết nối và hy vọng trình duyệt báo lỗi
-                res.end();
-            }
-        });
-
-        // Log khi stream hoàn tất (không bắt buộc nhưng hữu ích cho debug)
-        streamResponse.data.on('end', () => {
-            console.log('Stream hoàn tất.');
-        });
-
-    } catch (err) {
-        console.error("❌ Lỗi xử lý yêu cầu /api/download tổng thể:", err.message);
-         if (err.stack) {
-            console.error("Chi tiết:", err.stack);
-        }
-
-        // Xử lý lỗi trước khi gửi headers
-        if (!res.headersSent) {
-             if (err.status === 403) {
-                return res.status(403).json({ error: 'SESSDATA hết hạn, không hợp lệ hoặc không có quyền tải video này.' });
-            }
-             if (err.status === 400) {
-                 return res.status(400).json({ error: err.message});
-             }
-             // Lỗi từ Bilibili API (có status khác 403, 400)
-             if (err.message && err.message.includes('API Bilibili')) {
-                 return res.status(err.status || 502).json({error: `Lỗi từ Bilibili: ${err.message}`});
-             }
-             // Lỗi nội bộ khác
-             return res.status(500).json({
-                error: 'Lỗi máy chủ nội bộ',
-                detail: err.message
-             });
-        } else {
-            // Nếu lỗi xảy ra sau khi headers đã gửi (ví dụ trong pipe), chỉ có thể đóng kết nối
-            console.error('Lỗi sau khi gửi headers:', err.message);
-            res.end();
-        }
-    }
-});
+// Xóa endpoint /api/download
+// app.get('/api/download', ...); // Endpoint này không còn cần thiết
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
