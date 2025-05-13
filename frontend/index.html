@@ -113,6 +113,16 @@
     <p id="video-title" style="margin-top: 10px; font-size: 1.2em; font-weight: bold;"></p>
     
     <!-- Container cho Video Player (Tùy chọn) -->
+     <div id="video-player-container" style="margin-top: 10px;">
+        <!-- Video player sẽ được thêm vào đây bằng JS -->
+     </div>
+
+    <p style="margin-top: 15px; font-weight: bold;">Chọn chất lượng để tải xuống và ghép:</p>
+    <!-- Container cho các tùy chọn tải xuống -->
+    <div id="download-options">
+        <!-- Các nút tải xuống sẽ được thêm vào đây bằng JS -->
+    </div>
+
      <!-- Thanh tiến trình và trạng thái -->
      <div id="progress-container" class="hidden">
          <p id="status-message"></p>
@@ -385,7 +395,7 @@
              statusMessage.textContent = 'Đang tải audio stream...';
              progressBar.style.width = '0%';
              progressBar.textContent = '0%';
-             console.log('Fetching audio stream from:', audioUrl); // Log 20
+             console.log('Fetching audio stream from:', videoUrl); // Log 20
 
              // Tải dữ liệu audio
             const audioResponse = await fetch(audioUrl);
