@@ -53,7 +53,7 @@ app.get('/api/video', async (req, res) => {
           }
         });
 
-        if (playRes.data.code === 0 && playRes.data.data.dash?.video.length > 0) {
+        if (playRes.data.code === 0 && playRes.data.data?.dash?.video?.length > 0) {
           bestFormat = {
             quality: quality.label,
             size: (playRes.data.data.dash.video[0].bandwidth / 1024 / 1024).toFixed(2) + ' MB',
@@ -77,12 +77,19 @@ app.get('/api/video', async (req, res) => {
     });
 
   } catch (err) {
-    console.error(err.message);
-    if (err.response?.status === 403 || err.message.includes('403')) {
-      return res.status(403).json({ error: 'Cookie hết hạn hoặc không hợp lệ' });
-    }
-    res.status(500).json({ error: 'Lỗi khi xử lý yêu cầu' });
+  console.error("❌ Lỗi xử lý yêu cầu:", err.message);
+  console.error("Chi tiết:", err.stack);
+
+  if (err.response?.status === 403 || err.message.includes('403')) {
+    return res.status(403).json({ error: 'SESSDATA hết hạn hoặc không hợp lệ' });
   }
+
+  return res.status(500).json({
+    error: 'Lỗi máy chủ nội bộ',
+    detail: err.message,
+    stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+  });
+}
 });
 
 const PORT = process.env.PORT || 3000;
