@@ -137,36 +137,37 @@
 
   <script src="env.js"></script>
   <script>
+    console.log('--- Script execution started ---'); // Log 1
+
     const urlInput = document.getElementById('video-url');
     const btn = document.getElementById('download-btn');
     const resultDiv = document.getElementById('result');
     const thumbnail = document.getElementById('thumbnail');
-    const videoTitleElement = document.getElementById('video-title'); // Thêm phần tử hiển thị tiêu đề
-    const videoPlayerContainer = document.getElementById('video-player-container'); // Container player
-    const downloadOptionsDiv = document.getElementById('download-options'); // Container tùy chọn tải xuống
+    const videoTitleElement = document.getElementById('video-title');
+    const videoPlayerContainer = document.getElementById('video-player-container');
+    const downloadOptionsDiv = document.getElementById('download-options');
 
     const sessModal = document.getElementById('sessdata-modal');
     const sessInput = document.getElementById('sessdata-input');
 
-    // Phần tử cho tiến trình
     const progressContainer = document.getElementById('progress-container');
     const progressBar = document.getElementById('progress-bar');
     const statusMessage = document.getElementById('status-message');
 
+    console.log('Elements retrieved. btn:', btn); // Log 2: Kiểm tra xem btn có được lấy không
+
     let lastSessdata = localStorage.getItem('bilibili_sessdata') || '';
 
-    // Kiểm tra SESSDATA ban đầu (tùy chọn, có thể bỏ qua để backend trả 403)
-    // if (!lastSessdata) {
-    //   showError("SESSDATA chưa được lưu. Vui lòng nhập SESSDATA.");
-    // }
-
-    // Khởi tạo FFmpeg instance
     let ffmpeg = null;
     const createFFmpeg = FFmpeg.createFFmpeg;
 
     // Hàm tải và khởi tạo FFmpeg
     async function loadFFmpeg() {
-      if (ffmpeg && ffmpeg.isLoaded()) return; // Đã load rồi
+      console.log('Attempting to load FFmpeg'); // Log 3
+      if (ffmpeg && ffmpeg.isLoaded()) {
+          console.log('FFmpeg already loaded.');
+          return;
+      }
 
       // Hiển thị thông báo đang load FFmpeg (tùy chọn)
       statusMessage.textContent = 'Đang tải FFmpeg Wasm...';
@@ -176,8 +177,7 @@
 
       ffmpeg = createFFmpeg({
         log: true, // Hiển thị log của FFmpeg trong console
-        // corePath: 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.4/dist/ffmpeg-core.js' // Hoặc path đến core file
-        // Sử dụng auto-set corePath (mặc định khi dùng CDN)
+        // corePath is auto-set by CDN
       });
 
       // Thêm progress listener
@@ -198,11 +198,11 @@
 
       try {
         await ffmpeg.load();
-        console.log('FFmpeg Wasm loaded.');
+        console.log('FFmpeg Wasm loaded successfully.'); // Log 4
         statusMessage.textContent = 'FFmpeg đã sẵn sàng.';
         // progressContainer.classList.add('hidden'); // Ẩn sau khi load xong
       } catch (e) {
-         console.error('Failed to load FFmpeg Wasm', e);
+         console.error('Failed to load FFmpeg Wasm:', e); // Log lỗi tải FFmpeg
          statusMessage.textContent = 'Lỗi: Không thể tải FFmpeg.wasm.';
          // showError('Không thể tải FFmpeg.wasm. Tính năng tải xuống có thể không hoạt động.');
          throw e; // Ném lỗi để xử lý ở nơi gọi
@@ -216,15 +216,17 @@
     }
 
     async function fetchVideoInfo(url, sessdata) {
+      console.log('fetchVideoInfo called.'); // Log 5
       statusMessage.textContent = 'Đang lấy thông tin video...';
        progressContainer.classList.remove('hidden'); // Hiện container progress
        progressBar.style.width = '0%';
        progressBar.textContent = '0%';
 
       try {
-        // Sử dụng BACKEND_URL từ env.js
         const response = await fetch(`${BACKEND_URL}/api/video?url=${encodeURIComponent(url)}&sessdata=${encodeURIComponent(sessdata)}`);
+        console.log('Fetch response status:', response.status); // Log 6
         const data = await response.json();
+        console.log('Fetch response data:', data); // Log 7
 
         if (response.status !== 200) {
              // Xử lý các lỗi từ backend
@@ -233,7 +235,7 @@
 
         return data;
       } catch (err) {
-        console.error('Lỗi khi lấy thông tin video:', err);
+        console.error('Lỗi khi lấy thông tin video:', err); // Log lỗi fetch
          statusMessage.textContent = 'Lỗi khi lấy thông tin video.';
         throw err;
       }
@@ -241,8 +243,9 @@
 
     // Hàm hiển thị UI tải xuống dựa trên availableQualities
     function showDownloadUI(data) {
+      console.log('showDownloadUI called with data:', data); // Log 8
       thumbnail.src = data.thumbnail;
-      videoTitleElement.textContent = data.title; // Hiển thị tiêu đề
+      videoTitleElement.textContent = data.title;
       resultDiv.classList.remove('hidden');
 
       // Xóa các tùy chọn tải xuống cũ và player
@@ -286,43 +289,46 @@
       statusMessage.textContent = 'Chọn chất lượng để tải xuống.';
       progressBar.style.width = '0%';
       progressBar.textContent = '0%';
+      console.log('Download UI shown.'); // Log 9
     }
 
     function saveSessdata() {
+      console.log('saveSessdata called.'); // Log 10
       const value = sessInput.value.trim();
       if (!value) return showError('Vui lòng nhập SESSDATA');
       localStorage.setItem('bilibili_sessdata', value);
       lastSessdata = value;
       sessModal.classList.add('hidden');
-      // Tự động thử tải lại sau khi lưu sessdata
       startDownload();
     }
 
     async function startDownload() {
+      console.log('startDownload called.'); // Log 11
       const url = urlInput.value.trim();
       if (!url || !url.includes('bilibili.com')) {
         showError('URL không hợp lệ. Phải là video từ bilibili.com');
         return;
       }
 
-      // Kiểm tra lại SESSDATA trước khi gọi API video
        if (!lastSessdata) {
           showError("SESSDATA chưa được lưu hoặc hết hạn. Vui lòng nhập SESSDATA.");
-          sessModal.classList.remove('hidden'); // Hiển thị popup
+          sessModal.classList.remove('hidden');
           return;
        }
 
       btn.disabled = true;
       btn.textContent = 'Đang xử lý...';
-      resultDiv.classList.add('hidden'); // Ẩn kết quả cũ
-      downloadOptionsDiv.innerHTML = ''; // Xóa tùy chọn tải xuống cũ
-      videoPlayerContainer.innerHTML = ''; // Xóa player cũ
-      progressContainer.classList.remove('hidden'); // Hiển thị container progress
+      resultDiv.classList.add('hidden');
+      downloadOptionsDiv.innerHTML = '';
+      videoPlayerContainer.innerHTML = '';
+      progressContainer.classList.remove('hidden');
+       statusMessage.textContent = 'Bắt đầu xử lý...';
+
 
       try {
-        console.log('Fetching video info...');
+        console.log('Calling fetchVideoInfo...'); // Log 12
         const data = await fetchVideoInfo(url, lastSessdata);
-        console.log('Video info fetched:', data);
+        console.log('fetchVideoInfo returned.'); // Log 13
 
         showDownloadUI(data);
 
@@ -330,20 +336,21 @@
         if (err.message.includes('SESSDATA') || err.message.includes('403') || err.message.includes('hết hạn')) {
           showError("SESSDATA đã hết hạn hoặc không hợp lệ. Vui lòng nhập lại.");
           localStorage.removeItem('bilibili_sessdata');
-          lastSessdata = ''; // Xóa sessdata trong biến
-          sessModal.classList.remove('hidden'); // Hiển thị popup
+          lastSessdata = '';
+          sessModal.classList.remove('hidden');
         } else {
           showError('Lỗi: ' + err.message);
         }
-         progressContainer.classList.add('hidden'); // Ẩn progress nếu có lỗi
+         progressContainer.classList.add('hidden');
       } finally {
         btn.disabled = false;
          btn.textContent = 'Lấy thông tin Video';
+         console.log('startDownload finished.'); // Log 14
       }
     }
 
-    // --- FFmpeg.wasm Logic --- //
     async function handleDownloadClick(event) {
+        console.log('handleDownloadClick called.'); // Log 15
         const button = event.target;
         const videoUrl = button.dataset.videoUrl;
         const audioUrl = button.dataset.audioUrl;
@@ -354,18 +361,19 @@
              return;
          }
 
-        // Vô hiệu hóa tất cả các nút tải trong quá trình xử lý
         const downloadButtons = downloadOptionsDiv.querySelectorAll('button');
         downloadButtons.forEach(btn => btn.disabled = true);
         button.textContent = 'Đang tải...'; // Cập nhật trạng thái nút được click
 
         // Đảm bảo FFmpeg đã load
         if (!ffmpeg || !ffmpeg.isLoaded()) {
+             console.log('FFmpeg not loaded, loading now...'); // Log 16
              statusMessage.textContent = 'Đang tải FFmpeg. Vui lòng chờ...';
              progressContainer.classList.remove('hidden');
              try {
                  await loadFFmpeg();
                  statusMessage.textContent = 'FFmpeg đã sẵn sàng. Đang tải stream...';
+                 console.log('FFmpeg load completed in handleDownloadClick.'); // Log 17
              } catch (e) {
                  showError('Không thể tải FFmpeg. Vui lòng thử lại.');
                   // Bật lại các nút nếu load FFmpeg thất bại
@@ -374,131 +382,135 @@
                   progressContainer.classList.add('hidden');
                  return;
              }
+        } else {
+             console.log('FFmpeg already loaded.'); // Log 16.5
         }
+
 
          statusMessage.textContent = 'Đang tải video stream...';
          progressBar.style.width = '0%';
          progressBar.textContent = '0%';
+         console.log('Fetching video stream from:', videoUrl); // Log 18
 
         try {
              // Tải dữ liệu video
             const videoResponse = await fetch(videoUrl);
-            if (!videoResponse.ok) throw new Error(\`Lỗi tải video: ${videoResponse.statusText}\`);
-             const videoData = await videoResponse.arrayBuffer();
+            if (!videoResponse.ok) throw new Error(`Lỗi tải video: ${videoResponse.statusText}`); // Sửa lỗi cú pháp
+            const videoData = await videoResponse.arrayBuffer();
+            console.log('Video stream fetched.'); // Log 19
+
 
              statusMessage.textContent = 'Đang tải audio stream...';
              progressBar.style.width = '0%';
              progressBar.textContent = '0%';
+             console.log('Fetching audio stream from:', audioUrl); // Log 20
 
              // Tải dữ liệu audio
             const audioResponse = await fetch(audioUrl);
-             if (!audioResponse.ok) throw new Error(\`Lỗi tải audio: ${audioResponse.statusText}\`);
+             if (!audioResponse.ok) throw new Error(`Lỗi tải audio: ${audioResponse.statusText}`); // Sửa lỗi cú pháp
             const audioData = await audioResponse.arrayBuffer();
+            console.log('Audio stream fetched.'); // Log 21
+
 
             statusMessage.textContent = 'Đang ghi file vào FFmpeg...';
-             progressBar.style.width = '10%'; // Giả định một chút tiến độ
+             progressBar.style.width = '10%';
              progressBar.textContent = '10%';
+             console.log('Writing files to FFmpeg FS.'); // Log 22
 
-            // Ghi dữ liệu vào hệ thống file ảo của FFmpeg
+
             ffmpeg.FS('writeFile', 'input_video.mp4', new Uint8Array(videoData));
             ffmpeg.FS('writeFile', 'input_audio.aac', new Uint8Array(audioData)); // Giả định audio là aac
 
             statusMessage.textContent = 'Đang chạy lệnh ghép video...';
-            progressBar.style.width = '20%'; // Giả định một chút tiến độ
+            progressBar.style.width = '20%';
             progressBar.textContent = '20%';
+            console.log('Running FFmpeg command...'); // Log 23
 
-            // Chạy lệnh FFmpeg để ghép video và audio
-            await ffmpeg.run('-i', 'input_video.mp4', '-i', 'input_audio.aac', '-c', 'copy', '-map', '0:v:0', '-map', '1:a:0', 'output.mp4');
+             // Adjusted ffmpeg.run call
+            await ffmpeg.run('-i', 'input_video.mp4', '-i', 'input_audio.aac', '-c', 'copy', '-map', '0:v:0', '-map', '1:a:0', 'output.mp4'); // Sửa lỗi chính tả ffmempeg -> ffmpeg
+            console.log('FFmpeg command finished.'); // Log 24
 
             statusMessage.textContent = 'Đang đọc file kết quả...';
-             progressBar.style.width = '90%'; // Gần hoàn thành
+             progressBar.style.width = '90%';
             progressBar.textContent = '90%';
+             console.log('Reading output file from FFmpeg FS.'); // Log 25
 
-            // Đọc file output từ hệ thống file ảo của FFmpeg
             const outputData = ffmpeg.FS('readFile', 'output.mp4');
 
             statusMessage.textContent = 'Đang tạo link tải xuống...';
-             progressBar.style.width = '95%'; // Gần hoàn thành
+             progressBar.style.width = '95%';
             progressBar.textContent = '95%';
+            console.log('Creating Blob and download link.'); // Log 26
 
-            // Tạo Blob và URL cho file đã ghép
             const blob = new Blob([outputData.buffer], { type: 'video/mp4' });
             const blobUrl = URL.createObjectURL(blob);
 
-            // Tạo link tải về
             const finalDownloadLink = document.createElement('a');
             finalDownloadLink.href = blobUrl;
-            finalDownloadLink.download = \`${title || 'video'}_merged.mp4\`; // Tên file tải về
-            finalDownloadLink.textContent = \`✅ Tải xuống file đã ghép: ${title || 'video'}.mp4\`;
-            finalDownloadLink.classList.add('download-link'); // Dùng lại style css
-             finalDownloadLink.style.backgroundColor = '#10b981'; // Màu xanh lá cây
+            finalDownloadLink.download = `${title || 'video'}_merged.mp4`; // Sửa lỗi cú pháp
+            finalDownloadLink.textContent = `✅ Tải xuống file đã ghép: ${title || 'video'}.mp4`; // Sửa lỗi cú pháp
+            finalDownloadLink.classList.add('download-link');
+             finalDownloadLink.style.backgroundColor = '#10b981';
 
-            // Thay thế các nút tải bằng link tải cuối cùng
-            downloadOptionsDiv.innerHTML = ''; // Xóa các nút cũ
+
+            downloadOptionsDiv.innerHTML = '';
             downloadOptionsDiv.appendChild(finalDownloadLink);
 
              statusMessage.textContent = 'Tải xuống đã sẵn sàng!';
              progressBar.style.width = '100%';
              progressBar.textContent = '100%';
 
-             // Giải phóng bộ nhớ (tùy chọn nhưng nên làm với Blob)
-             // Khi link bị click hoặc trang unload, Blob URL nên được revoke.
-             // Đơn giản nhất là revoke khi trang unload hoặc khi tạo Blob URL mới.
              window.addEventListener('beforeunload', () => URL.revokeObjectURL(blobUrl));
+             console.log('Download link created.'); // Log 27
+
 
         } catch (err) {
-            console.error('Lỗi trong quá trình ghép video/audio:', err);
+            console.error('Lỗi trong quá trình ghép video/audio:', err); // Log lỗi chi tiết ghép
              statusMessage.textContent = 'Lỗi: Đã xảy ra lỗi khi ghép video và audio.';
             showError('Đã xảy ra lỗi khi ghép video và audio. Chi tiết: ' + err.message);
-             // Hiển thị lại các nút tải với thông báo lỗi
-             downloadOptionsDiv.innerHTML = ''; // Xóa các nút cũ trước
+
+             downloadOptionsDiv.innerHTML = '';
              const errorMessage = document.createElement('p');
              errorMessage.style.color = 'red';
              errorMessage.textContent = 'Lỗi ghép video. Vui lòng thử lại hoặc chọn chất lượng khác.';
              downloadOptionsDiv.appendChild(errorMessage);
 
-             // Có thể thêm lại các nút tải ban đầu nếu muốn người dùng thử lại
-             // Bật lại các nút đã bị vô hiệu hóa
-             // downloadButtons.forEach(btn => btn.disabled = false);
-             // button.textContent = `Tải xuống và ghép: ${button.textContent.split(':')[1].trim()}`; // Khôi phục text
-
         } finally {
-            // Cleanup FFmpeg filesystem (quan trọng để giải phóng bộ nhớ)
+             console.log('Cleaning up FFmpeg FS...'); // Log 28
              if (ffmpeg && ffmpeg.FS) { // Kiểm tra ffmpeg và FS có tồn tại không
                  try {
-                      // Đọc lại tên file input từ button dataset nếu cần cleanup sau lỗi fetch
-                     const videoFileName = 'input_video.mp4';
-                     const audioFileName = 'input_audio.aac'; // Giả định
+                      const videoFileName = 'input_video.mp4';
+                     const audioFileName = 'input_audio.aac';
                      const outputFileName = 'output.mp4';
 
-                     ffmpeg.FS('unlink', videoFileName).catch(e => console.warn(`Failed to unlink ${videoFileName}:`, e)); // ignore errors
-                     ffmpeg.FS('unlink', audioFileName).catch(e => console.warn(`Failed to unlink ${audioFileName}:`, e)); // ignore errors
-                      // Chỉ unlink output nếu nó được tạo thành công
+                     ffmpeg.FS('unlink', videoFileName).catch(e => console.warn(`Failed to unlink ${videoFileName}:`, e));
+                     ffmpeg.FS('unlink', audioFileName).catch(e => console.warn(`Failed to unlink ${audioFileName}:`, e));
                       try {
                           ffmpeg.FS('stat', outputFileName); // Kiểm tra sự tồn tại trước khi unlink
-                          ffmpeg.FS('unlink', outputFileName).catch(e => console.warn(`Failed to unlink ${outputFileName}:`, e)); // ignore errors
+                          ffmpeg.FS('unlink', outputFileName).catch(e => console.warn(`Failed to unlink ${outputFileName}:`, e));
                       } catch (e) {
-                          // output.mp4 không tồn tại, không cần unlink
+                          // output.mp4 doesn't exist
                       }
 
                  } catch (e) {
                      console.error('Lỗi khi dọn dẹp FFmpeg FS:', e);
                  }
              }
-             // Giữ progress container để hiển thị trạng thái cuối cùng hoặc lỗi
-             // progressContainer.classList.add('hidden'); // Có thể ẩn đi sau vài giây
+             console.log('handleDownloadClick finished.'); // Log 29
         }
     }
 
     btn.addEventListener('click', startDownload);
+    console.log('Event listener attached to button:', btn); // Log 30
+
 
     // Tự động load FFmpeg khi trang được tải (tùy chọn, có thể load khi cần)
-     // loadFFmpeg().catch(e => {
-     //     console.error('Failed to load FFmpeg Wasm', e);
-     //     showError('Không thể tải FFmpeg.wasm. Tính năng tải xuống có thể không hoạt động.');
-     // });
+    // loadFFmpeg().catch(e => {
+    //      console.error('Initial FFmpeg load failed:', e);
+    //      // showError('Không thể tải FFmpeg.wasm.'); // Có thể không cần thiết
+    // });
 
-     // Load FFmpeg khi người dùng bắt đầu tương tác (vd: click nút tải lần đầu)
+     console.log('--- Script execution finished ---'); // Log 31
 
   </script>
 </body>
