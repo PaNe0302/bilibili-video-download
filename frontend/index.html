@@ -33,30 +33,20 @@
       cursor: pointer;
       font-size: 16px;
     }
+    .hidden {
+      display: none;
+    }
     .result {
       margin-top: 20px;
       background: #1e293b;
       padding: 16px;
       border-radius: 8px;
     }
-    .hidden {
-      display: none;
-    }
-    .modal {
-      position: fixed;
-      top: 0; left: 0;
-      width: 100%; height: 100%;
-      background: rgba(0,0,0,0.8);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      z-index: 9999;
-    }
     .modal-box {
       background: #1e293b;
       padding: 20px;
       border-radius: 10px;
-      width: 90%;
+      width: 100%;
       max-width: 400px;
     }
     a.download-link {
@@ -81,13 +71,13 @@
   <button id="download-btn">Tải Về Ngay</button>
 
   <!-- Modal nhập SESSDATA -->
-  <div id="sessdata-modal" class="hidden modal">
+  <div id="sessdata-modal" class="modal hidden">
     <div class="modal-box">
       <h2>Nhập SESSDATA</h2>
       <p>Vui lòng nhập SESSDATA hợp lệ để tiếp tục.</p>
       <textarea id="sessdata-input" rows="4" placeholder="Paste SESSDATA vào đây..."></textarea>
       <br/>
-      <button onclick="saveSessdata()">Lưu và Thử lại</button>
+      <button onclick="saveSessdata()">Lưu và Tiếp tục</button>
     </div>
   </div>
 
@@ -97,7 +87,6 @@
     <a id="download-link" class="download-link hidden" href="#">Tải xuống</a>
   </div>
 
-  <!-- JS logic -->
   <script>
     const urlInput = document.getElementById('video-url');
     const btn = document.getElementById('download-btn');
@@ -107,8 +96,12 @@
     const sessModal = document.getElementById('sessdata-modal');
     const sessInput = document.getElementById('sessdata-input');
 
-    let currentUrl = '';
     let lastSessdata = localStorage.getItem('bilibili_sessdata') || '';
+
+    // Kiểm tra SESSDATA ban đầu
+    if (!lastSessdata) {
+      showError("SESSDATA chưa được lưu. Vui lòng nhập SESSDATA.");
+    }
 
     function showError(msg) {
       alert(msg);
@@ -118,7 +111,7 @@
       try {
         const response = await fetch(`https://bilibili-video-download-production.up.railway.app/api/video?url= ${encodeURIComponent(url)}&sessdata=${encodeURIComponent(sessdata)}`);
         const data = await response.json();
-        if (response.status === 403) throw new Error('SESSDATA hết hạn');
+        if (response.status === 403) throw new Error('SESSDATA hết hạn hoặc không hợp lệ');
         if (data.error) throw new Error(data.error);
         return data;
       } catch (err) {
@@ -139,39 +132,36 @@
       localStorage.setItem('bilibili_sessdata', value);
       lastSessdata = value;
       sessModal.classList.add('hidden');
-      startDownload(currentUrl);
+      startDownload();
     }
 
-    async function startDownload(inputUrl) {
-      currentUrl = inputUrl;
-      resultDiv.classList.add('hidden');
-      btn.disabled = true;
-
-      if (!lastSessdata) {
-        sessModal.classList.remove('hidden');
-        btn.disabled = false;
+    async function startDownload() {
+      const url = urlInput.value.trim();
+      if (!url.includes('bilibili.com')) {
+        showError('URL không hợp lệ. Phải là video từ bilibili.com');
         return;
       }
 
+      btn.disabled = true;
+
       try {
-        const data = await fetchVideoInfo(inputUrl, lastSessdata);
+        const data = await fetchVideoInfo(url, lastSessdata);
         showDownloadUI(data);
         resultDiv.classList.remove('hidden');
       } catch (err) {
         if (err.message.includes('SESSDATA')) {
-          sessModal.classList.remove('hidden');
+          showError("SESSDATA đã hết hạn. Vui lòng nhập lại.");
+          localStorage.removeItem('bilibili_sessdata');
+          sessModal.classList.remove('hidden'); // Hiển thị popup
         } else {
-          alert('Lỗi: ' + err.message);
+          showError('Lỗi: ' + err.message);
         }
       } finally {
         btn.disabled = false;
       }
     }
 
-    btn.addEventListener('click', () => {
-      const url = urlInput.value.trim();
-      startDownload(url);
-    });
+    btn.addEventListener('click', startDownload);
   </script>
 </body>
 </html>
