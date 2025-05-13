@@ -116,7 +116,7 @@
 
     async function fetchVideoInfo(url, sessdata) {
       try {
-        const response = await fetch(`https://bilibili-backend.up.railway.app/api/video?url= ${encodeURIComponent(url)}&sessdata=${encodeURIComponent(sessdata)}`);
+        const response = await fetch(`https://bilibili-video-download-production.up.railway.app/api/video?url= ${encodeURIComponent(url)}&sessdata=${encodeURIComponent(sessdata)}`);
         const data = await response.json();
         if (response.status === 403) throw new Error('SESSDATA hết hạn');
         if (data.error) throw new Error(data.error);
