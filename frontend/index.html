@@ -160,6 +160,8 @@
 
     let ffmpeg = null;
 
+     let isFFmpegLoading = false; // Biến cờ
+
     // Hàm tải và khởi tạo FFmpeg
     async function loadFFmpeg() {
       console.log('Attempting to load FFmpeg'); // Log 3
@@ -206,6 +208,8 @@
          statusMessage.textContent = 'Lỗi: Không thể tải FFmpeg.wasm.';
          // showError('Không thể tải FFmpeg.wasm. Tính năng tải xuống có thể không hoạt động.');
          throw e; // Ném lỗi để xử lý ở nơi gọi
+      } finally {
+           isFFmpegLoading = false; // Reset cờ sau khi tải xong hoặc lỗi
       }
     }
 
@@ -357,22 +361,31 @@
         downloadButtons.forEach(btn => btn.disabled = true);
         button.textContent = 'Đang tải...'; // Cập nhật trạng thái nút được click
 
+         if (isFFmpegLoading) {
+             console.warn('FFmpeg is already loading. Ignoring click.');
+             return; // Prevent multiple FFmpeg loadings
+         }
+
         // Đảm bảo FFmpeg đã load
         if (!ffmpeg || !ffmpeg.isLoaded()) {
              console.log('FFmpeg not loaded, loading now...'); // Log 16
              statusMessage.textContent = 'Đang tải FFmpeg. Vui lòng chờ...';
              progressContainer.classList.remove('hidden');
+              isFFmpegLoading = true; // Set flag to prevent multiple loadings
              try {
                  await loadFFmpeg();
                  statusMessage.textContent = 'FFmpeg đã sẵn sàng. Đang tải stream...';
                  console.log('FFmpeg load completed in handleDownloadClick.'); // Log 17
              } catch (e) {
+                 console.error('Lỗi khi tải FFmpeg trong handleDownloadClick:', e);
                  showError('Không thể tải FFmpeg. Vui lòng thử lại.');
                   // Bật lại các nút nếu load FFmpeg thất bại
                  downloadButtons.forEach(btn => btn.disabled = false);
                   button.textContent = `Tải xuống và ghép: ${button.dataset.qualityLabel}`; // Khôi phục text
                   progressContainer.classList.add('hidden');
                  return;
+             }  finally {
+                 isFFmpegLoading = false;
              }
         } else {
              console.log('FFmpeg already loaded.'); // Log 16.5
