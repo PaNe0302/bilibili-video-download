@@ -22,16 +22,18 @@ app.get('/api/video', async (req, res) => {
     // Trích xuất bvid từ URL
     const bvidMatch = url.match(/BV[0-9A-Za-z]{10}/);
     if (!bvidMatch) throw new Error('Không tìm thấy bvid trong URL');
-
     const bvid = bvidMatch[0];
 
-    // Gọi API Bilibili để lấy thông tin video
-    const infoRes = await axios.get(`https://api.bilibili.com/x/web-interface/view?bvid= ${bvid}`);
-    const cid = infoRes.data.data.cid;
-    const title = infoRes.data.data.title;
-    const thumbnail = infoRes.data.data.pic;
+    // Gọi API Bilibili để lấy cid
+    const infoRes = await axios.get(`https://api.bilibili.com/x/web-interface/view?bvid= ${bvid}`, {
+      headers: {
+        'Cookie': `SESSDATA=${sessdata}`
+      }
+    });
 
-    // Các chất lượng ưu tiên
+    const cid = infoRes.data.data.cid;
+
+    // Các độ phân giải ưu tiên
     const QUALITIES = [
       { qn: 120, label: '4K HDR' },
       { qn: 112, label: '1080P+60fps' },
@@ -46,7 +48,9 @@ app.get('/api/video', async (req, res) => {
       const playUrl = `https://api.bilibili.com/x/player/playurl?bvid= ${bvid}&cid=${cid}&qn=${quality.qn}&fnval=16`;
       try {
         const playRes = await axios.get(playUrl, {
-          headers: { Cookie: `SESSDATA=${sessdata}` }
+          headers: {
+            Cookie: `SESSDATA=${sessdata}`
+          }
         });
 
         if (playRes.data.code === 0 && playRes.data.data.dash?.video.length > 0) {
@@ -67,8 +71,8 @@ app.get('/api/video', async (req, res) => {
     }
 
     res.json({
-      title,
-      thumbnail,
+      title: infoRes.data.data.title,
+      thumbnail: infoRes.data.data.pic,
       format: bestFormat
     });
 
@@ -81,7 +85,6 @@ app.get('/api/video', async (req, res) => {
   }
 });
 
-// Dùng PORT từ biến môi trường
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🚀 Server đang chạy trên port ${PORT}`);
