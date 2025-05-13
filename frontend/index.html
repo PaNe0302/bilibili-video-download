@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BiliDownloader</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico">
   <style>
     body {
       background: #0f172a;
@@ -112,6 +113,7 @@
       try {
         const response = await fetch(`${BACKEND_URL}/api/video?url=${encodeURIComponent(url)}&sessdata=${encodeURIComponent(sessdata)}`);
         const data = await response.json();
+        // Backend giờ trả về 403 nếu SESSDATA không hợp lệ khi lấy info video
         if (response.status === 403) throw new Error('SESSDATA hết hạn hoặc không hợp lệ');
         if (data.error) throw new Error(data.error);
         return data;
@@ -122,9 +124,15 @@
 
     function showDownloadUI(data) {
       thumbnail.src = data.thumbnail;
-      downloadLink.href = data.format.link;
+      // Tạo URL cho endpoint download trên backend
+      const downloadBackendUrl = `${BACKEND_URL}/api/download?bvid=${data.bvid}&cid=${data.cid}&qn=${data.format.qn}&sessdata=${encodeURIComponent(lastSessdata)}&title=${encodeURIComponent(data.title)}`;
+
+      downloadLink.href = downloadBackendUrl; // Sử dụng URL backend download
       downloadLink.textContent = `🔽 Tải xuống (${data.format.quality}) - ${data.format.size}`;
       downloadLink.classList.remove('hidden');
+
+      // Tự động tải xuống khi link xuất hiện (tùy chọn)
+      // downloadLink.click();
     }
 
     function saveSessdata() {
@@ -143,16 +151,25 @@
         return;
       }
 
+      // Kiểm tra lại SESSDATA trước khi gọi API video
+       if (!lastSessdata) {
+          showError("SESSDATA chưa được lưu. Vui lòng nhập SESSDATA.");
+          sessModal.classList.remove('hidden'); // Hiển thị popup
+          return;
+       }
+
       btn.disabled = true;
+      resultDiv.classList.add('hidden'); // Ẩn kết quả cũ
 
       try {
         const data = await fetchVideoInfo(url, lastSessdata);
         showDownloadUI(data);
         resultDiv.classList.remove('hidden');
       } catch (err) {
-        if (err.message.includes('SESSDATA')) {
-          showError("SESSDATA đã hết hạn. Vui lòng nhập lại.");
+        if (err.message.includes('SESSDATA') || err.message.includes('403')) {
+          showError("SESSDATA đã hết hạn hoặc không hợp lệ. Vui lòng nhập lại.");
           localStorage.removeItem('bilibili_sessdata');
+          lastSessdata = ''; // Xóa sessdata trong biến
           sessModal.classList.remove('hidden'); // Hiển thị popup
         } else {
           showError('Lỗi: ' + err.message);
@@ -163,6 +180,12 @@
     }
 
     btn.addEventListener('click', startDownload);
+
+    // Tự động kiểm tra SESSDATA khi load trang
+    // if (!lastSessdata) {
+    //    sessModal.classList.remove('hidden');
+    // }
+
   </script>
 </body>
 </html>
